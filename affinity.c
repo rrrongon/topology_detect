@@ -74,14 +74,16 @@ void* thread1(void *arg){
 	shm_ptr = (char *) shmat(shm_id, NULL, 0);  /* attach */
 	if ((int) shm_ptr == -1) {
      		printf("*** shmat error (server) ***\n");
-     		exit(1);
+		t->lat = -1;
+     		pthread_exit(1);    
 	}
 
 	void *y ;
 	y = shm_ptr;
+	int suc;
 	numa_tonode_memory( y, N, numa_node_of_cpu(core));
 
-	//printf("Core: %d writing at address of %p\n",core, y);
+	printf("Core: %d writing at address of %p\n",core, y);
         char c;
 	struct timeval t1, t2;
 	gettimeofday(&t1, NULL);
@@ -94,6 +96,7 @@ void* thread1(void *arg){
          (t2.tv_usec - t1.tv_usec));
 
         *(t->x) = y;
+	pthread_exit(1);    
 
 }
 
@@ -106,6 +109,7 @@ void* thread2(void *arg)
     	size_t N = t->N, M = t->M, core = t->core, T = t->T, B = t->B;
     	void *x = *(t->x);
 
+	if(t->lat!=-1){
     	N = N - (B-1);
     	pin_to_core(core);
 
@@ -117,13 +121,13 @@ void* thread2(void *arg)
         shm_id = shmget(mem_key, N*sizeof(char), IPC_CREAT | 0666);
         if (shm_id < 0) {
                 printf("*** shmget error (server) ***\n");
-                exit(1);
+                pthread_exit(1);
         }
 
         shm_ptr = (char *) shmat(shm_id, NULL, 0);  /* attach */
         if ((int) shm_ptr == -1) {
                 printf("*** shmat error (server) ***\n");
-                exit(1);
+                pthread_exit(1);    
         }
 
         void *y ;
@@ -133,7 +137,7 @@ void* thread2(void *arg)
 
 	struct timeval t1, t2;
 
-	//printf("Reading at address of x: %p and local: %p\n",x, y);
+//printf("Reading at address of x: %p and local: %p\n",x, y);
 	gettimeofday(&t1, NULL);
         for (size_t i = 0;i<M;++i){
                 for(size_t j = 0;j<T;++j)
@@ -147,7 +151,11 @@ void* thread2(void *arg)
          (t2.tv_usec - t1.tv_usec));
 
 	numa_free(y,N);
-	//numa_free(x,N);
+	numa_free(x,N);
+	pthread_exit(1);
+	}else{
+		pthread_exit(1);
+	}
 }
 
 void pin_to_core(size_t core)
