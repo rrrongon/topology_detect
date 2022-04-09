@@ -24,6 +24,8 @@
 #include <numaif.h>
 #include <numa.h>
 #include <sys/time.h>
+#define _XOPEN_SOURCE
+#include <sys/shm.h>
 
 
 typedef struct thread_info_s
@@ -56,14 +58,40 @@ void* thread1(void *arg){
         size_t N = t->N, M = t->M, core = t->core, T = t->T, B = t->B;
         pin_to_core(core);
 
-	void* y = numa_alloc_local(N);
-        N = N - (B-1);
+	//void* y = numa_alloc_local(N);
+        //N = N - (B-1);
 
+	int       shm_id;
+	key_t     mem_key;
+	void       *shm_ptr;
+	mem_key = ftok(".", 'a');
+	shm_id = shmget(mem_key, N*sizeof(char), IPC_CREAT | 0666);
+	if (shm_id < 0) {
+     		printf("*** shmget error (server) ***\n");
+     		exit(1);
+	}
+
+	shm_ptr = (char *) shmat(shm_id, NULL, 0);  /* attach */
+	if ((int) shm_ptr == -1) {
+     		printf("*** shmat error (server) ***\n");
+     		exit(1);
+	}
+
+	void *y ;
+	y = shm_ptr;
+	numa_tonode_memory( y, N, numa_node_of_cpu(core));
+
+	//printf("Core: %d writing at address of %p\n",core, y);
         char c;
+	struct timeval t1, t2;
+	gettimeofday(&t1, NULL);
         for(size_t j = 0;j<T;++j)
         {
                 *(((char*)y) + j) += 1;
         }
+	gettimeofday(&t2, NULL);
+        t->lat = ((t2.tv_sec - t1.tv_sec)*100000 +
+         (t2.tv_usec - t1.tv_usec));
 
         *(t->x) = y;
 
@@ -81,20 +109,41 @@ void* thread2(void *arg)
     	N = N - (B-1);
     	pin_to_core(core);
 
-	void* y = numa_alloc_local(N);
+	//void* y = numa_alloc_local(N);
+	int       shm_id;
+        key_t     mem_key;
+        void       *shm_ptr;
+        mem_key = ftok(".", 'c');
+        shm_id = shmget(mem_key, N*sizeof(char), IPC_CREAT | 0666);
+        if (shm_id < 0) {
+                printf("*** shmget error (server) ***\n");
+                exit(1);
+        }
+
+        shm_ptr = (char *) shmat(shm_id, NULL, 0);  /* attach */
+        if ((int) shm_ptr == -1) {
+                printf("*** shmat error (server) ***\n");
+                exit(1);
+        }
+
+        void *y ;
+        y = shm_ptr;
+        numa_tonode_memory( y, N, numa_node_of_cpu(core));
+
 
 	struct timeval t1, t2;
 
+	//printf("Reading at address of x: %p and local: %p\n",x, y);
 	gettimeofday(&t1, NULL);
         for (size_t i = 0;i<M;++i){
                 for(size_t j = 0;j<T;++j)
                 {
-                        *(((char*)y) + j) = *(((char*)x) + j) ;
+                        *(((char*)y) + j) =  *(((char*)x) + j) + 1 ;
                 }
         }
 
 	gettimeofday(&t2, NULL);
-        t->lat = ((t2.tv_sec - t1.tv_sec)*100000 +
+        t->lat = t->lat + ((t2.tv_sec - t1.tv_sec)*100000 +
          (t2.tv_usec - t1.tv_usec));
 
 	numa_free(y,N);
@@ -115,7 +164,7 @@ void print_lat(int *dis_lat, int numberOfProcessors){
 	}
 	printf("\n");
 	int pos;
-	for(int i=0;i<1;i++){
+	for(int i=0;i<numberOfProcessors;i++){
 		printf("Core %d:\n", i);
 		for(int j=0; j< numberOfProcessors; j++){
 			pos = (i*numberOfProcessors) + j;
@@ -152,14 +201,14 @@ int main(int argc, char *argv[]) {
 
         tinfo0 = malloc(1 * sizeof(thread_info));
         void* x;
-        size_t N = 10000, M = 10, T = 1000, B;
+        size_t N = 100000, M = 1, T = 100000, B;
 
 	int slot_cnt = numberOfProcessors * numberOfProcessors;
 	int* dist_mat = malloc(slot_cnt * sizeof(int));
 	int lat_pos;
 
 	//int procs [24] = {1,2,3,24,25,26,47,48,49, 63,64,152,191,193, 70,71,72, 110,195,198,210,220,250,254};	
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < numberOfProcessors; i++) {
                 for(int j=0; j< numberOfProcessors; j++){
                         if(i!=j){
 				//int core_j = procs[j];
