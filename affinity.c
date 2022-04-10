@@ -81,20 +81,23 @@ void* thread1(void *arg){
 	void *y ;
 	y = shm_ptr;
 	int suc;
+	int node;
+	//printf("core: %d is in %d node\n", core, numa_node_of_cpu(core));
 	numa_tonode_memory( y, N, numa_node_of_cpu(core));
 
-	printf("Core: %d writing at address of %p\n",core, y);
+	//printf("Core: %d writing at address of %p\n",core, y);
         char c;
 	struct timeval t1, t2;
 	gettimeofday(&t1, NULL);
         for(size_t j = 0;j<T;++j)
         {
-                *(((char*)y) + j) += 1;
+		//*(((char*)y) + j) += 1;
+		*(((char*)y) + j ) += 1;
         }
 	gettimeofday(&t2, NULL);
         t->lat = ((t2.tv_sec - t1.tv_sec)*100000 +
          (t2.tv_usec - t1.tv_usec));
-
+//	t->lat = 0;
         *(t->x) = y;
 	pthread_exit(1);    
 
@@ -142,14 +145,18 @@ void* thread2(void *arg)
         for (size_t i = 0;i<M;++i){
                 for(size_t j = 0;j<T;++j)
                 {
-                        *(((char*)y) + j) =  *(((char*)x) + j) + 1 ;
+                        //*(((char*)y) + ((j * 1009) % N))  =  *(((char*)x) + ((j * 1009) % N)) + 1; ;
+			*(((char*)y) +j )  =  *(((char*)x) + j) + 1; ;
                 }
         }
 
 	gettimeofday(&t2, NULL);
-        t->lat = t->lat + ((t2.tv_sec - t1.tv_sec)*100000 +
+
+         int total_lat= t->lat +  ((t2.tv_sec - t1.tv_sec)*100000 +
          (t2.tv_usec - t1.tv_usec));
 
+	 int avg_lat = total_lat/M;
+	 t->lat =avg_lat;
 	numa_free(y,N);
 	numa_free(x,N);
 	pthread_exit(1);
@@ -209,7 +216,7 @@ int main(int argc, char *argv[]) {
 
         tinfo0 = malloc(1 * sizeof(thread_info));
         void* x;
-        size_t N = 100000, M = 1, T = 100000, B;
+        size_t N = 100000, M = 3, T = 100000, B;
 
 	int slot_cnt = numberOfProcessors * numberOfProcessors;
 	int* dist_mat = malloc(slot_cnt * sizeof(int));
