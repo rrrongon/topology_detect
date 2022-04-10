@@ -94,9 +94,10 @@ void* thread1(void *arg){
 		//*(((char*)y) + j) += 1;
 		*(((char*)y) + j ) += 1;
         }
+	
 	gettimeofday(&t2, NULL);
-        t->lat = ((t2.tv_sec - t1.tv_sec)*100000 +
-         (t2.tv_usec - t1.tv_usec));
+        t->lat = (((t2.tv_sec - t1.tv_sec)*100000 +
+         (t2.tv_usec - t1.tv_usec)));
 //	t->lat = 0;
         *(t->x) = y;
 	pthread_exit(1);    
