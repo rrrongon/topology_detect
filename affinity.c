@@ -37,6 +37,7 @@ typedef struct thread_info_s
     size_t B;
     size_t T;
     int lat;
+    int shmid;
 } thread_info;
 
 typedef struct sorted_lat
@@ -58,10 +59,10 @@ void* thread1(void *arg){
         size_t N = t->N, M = t->M, core = t->core, T = t->T, B = t->B;
         pin_to_core(core);
 
-	//void* y = numa_alloc_local(N);
-        //N = N - (B-1);
+	void* y = numa_alloc_local(N);
+        N = N - (B-1);
 
-	int       shm_id;
+	/*int       shm_id;
 	key_t     mem_key;
 	void       *shm_ptr;
 	mem_key = ftok(".", 'a');
@@ -71,7 +72,7 @@ void* thread1(void *arg){
      		exit(1);
 	}
 
-	shm_ptr = (char *) shmat(shm_id, NULL, 0);  /* attach */
+	shm_ptr = (char *) shmat(shm_id, NULL, 0); 
 	if ((int) shm_ptr == -1) {
      		printf("*** shmat error (server) ***\n");
 		t->lat = -1;
@@ -84,22 +85,27 @@ void* thread1(void *arg){
 	int node;
 	//printf("core: %d is in %d node\n", core, numa_node_of_cpu(core));
 	numa_tonode_memory( y, N, numa_node_of_cpu(core));
+	*/
 
 	//printf("Core: %d writing at address of %p\n",core, y);
         char c;
 	struct timeval t1, t2;
 	gettimeofday(&t1, NULL);
+	//for(size_t i=0;i<M;i++){
         for(size_t j = 0;j<T;++j)
         {
 		//*(((char*)y) + j) += 1;
-		*(((char*)y) + j ) += 1;
+		*(((char*)y) + ((j * 1009) % N) ) += 1;
         }
-	
+	//}
 	gettimeofday(&t2, NULL);
-        t->lat = (((t2.tv_sec - t1.tv_sec)*100000 +
-         (t2.tv_usec - t1.tv_usec)));
-//	t->lat = 0;
+        t->lat = (((t2.tv_sec - t1.tv_sec)*100000000 +
+         (t2.tv_usec - t1.tv_usec)*1000));
+	t->lat = 0;
         *(t->x) = y;
+	//t->shmid = shm_id;
+	//shmdt(shm_ptr);
+    	//shmctl(shm_id, IPC_RMID, 0);
 	pthread_exit(1);    
 
 }
@@ -117,8 +123,8 @@ void* thread2(void *arg)
     	N = N - (B-1);
     	pin_to_core(core);
 
-	//void* y = numa_alloc_local(N);
-	int       shm_id;
+	void* y = numa_alloc_local(N);
+	/*int       shm_id;
         key_t     mem_key;
         void       *shm_ptr;
         mem_key = ftok(".", 'c');
@@ -128,7 +134,7 @@ void* thread2(void *arg)
                 pthread_exit(1);
         }
 
-        shm_ptr = (char *) shmat(shm_id, NULL, 0);  /* attach */
+        shm_ptr = (char *) shmat(shm_id, NULL, 0);
         if ((int) shm_ptr == -1) {
                 printf("*** shmat error (server) ***\n");
                 pthread_exit(1);    
@@ -137,7 +143,7 @@ void* thread2(void *arg)
         void *y ;
         y = shm_ptr;
         numa_tonode_memory( y, N, numa_node_of_cpu(core));
-
+	*/
 
 	struct timeval t1, t2;
 
@@ -146,20 +152,26 @@ void* thread2(void *arg)
         for (size_t i = 0;i<M;++i){
                 for(size_t j = 0;j<T;++j)
                 {
-                        //*(((char*)y) + ((j * 1009) % N))  =  *(((char*)x) + ((j * 1009) % N)) + 1; ;
-			*(((char*)y) +j )  =  *(((char*)x) + j) + 1; ;
+                        *(((char*)y) + j )  =  *(((char*)x) + ((j * 1009) % N)) + 1; ;
+			//*(((char*)y) +j )  =  *(((char*)x) + j) + 1; ;
                 }
         }
 
 	gettimeofday(&t2, NULL);
 
-         int total_lat= t->lat +  ((t2.tv_sec - t1.tv_sec)*100000 +
-         (t2.tv_usec - t1.tv_usec));
+         int total_lat= t->lat +  ((t2.tv_sec - t1.tv_sec)*100000000 +
+         (t2.tv_usec - t1.tv_usec)*1000);
 
 	 int avg_lat = total_lat/M;
 	 t->lat =avg_lat;
 	numa_free(y,N);
 	numa_free(x,N);
+	/*shmdt(shm_ptr);
+        shmctl(shm_id, IPC_RMID, 0);
+
+	shmdt(x);
+        shmctl(t->shmid, IPC_RMID, 0);
+	*/
 	pthread_exit(1);
 	}else{
 		pthread_exit(1);
@@ -217,7 +229,7 @@ int main(int argc, char *argv[]) {
 
         tinfo0 = malloc(1 * sizeof(thread_info));
         void* x;
-        size_t N = 100000, M = 3, T = 100000, B;
+        size_t N = 100, M = 15, T = 100, B;
 
 	int slot_cnt = numberOfProcessors * numberOfProcessors;
 	int* dist_mat = malloc(slot_cnt * sizeof(int));
